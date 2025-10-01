@@ -1,0 +1,166 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  SUPER_ADMIN
+  ADMIN
+  STUDENT
+}
+
+enum UserStatus {
+  PENDING
+  ACTIVE
+  INACTIVE
+  BLOCKED
+}
+
+enum AuthProviderType {
+  google
+  credentials
+}
+
+model User {
+  id            String         @id @default(uuid())
+  name          String
+  email         String         @unique
+  password      String?
+  phone         String?
+  address       String?
+  picture       String?
+  status        UserStatus     @default(PENDING)
+  role          UserRole       @default(STUDENT)
+  isDeleted     Boolean        @default(false)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  authProviders AuthProvider[]
+  course        Course[]
+  notification  Notification[]
+  report        Report[]
+  submission    Submission[]
+}
+
+model AuthProvider {
+  id         String           @id @default(uuid())
+  provider   AuthProviderType
+  providerId String
+  userId     String
+  user       User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerId])
+}
+
+enum ModuleType {
+  speaking
+  writing
+  reading
+  listening
+}
+
+model Course {
+  id           String         @id @default(uuid())
+  title        String
+  slug         String         @unique
+  description  String
+  price        Int
+  thumbnail    String?
+  metadata     Json?
+  visibility   Boolean        @default(false)
+  featured     Boolean        @default(false)
+  createdById  String
+  createdBy    User           @relation(fields: [createdById], references: [id])
+  isDeleted    Boolean        @default(false)
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+  courseModule CourseModule[]
+  enrollment   enrollment[]
+  Assignment   Assignment[]
+
+  @@map("courses")
+}
+
+model CourseModule {
+  id          String     @id @default(uuid())
+  title       String
+  description String
+  order       Int
+  moduleType  ModuleType
+  metadata    Json?
+  courseId    String
+  course      Course     @relation(fields: [courseId], references: [id])
+  isDeleted   Boolean    @default(false)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  @@unique([courseId, order])
+  @@map("courseModules")
+}
+
+model enrollment {
+  id        String   @id @default(uuid())
+  userId    String
+  courseId  String
+  course    Course   @relation(fields: [courseId], references: [id])
+  isDeleted Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, courseId])
+  @@map("enrollments")
+}
+
+enum NotificationChannel {
+  email
+  sms
+  push
+}
+
+model Assignment {
+  id          String       @id @default(uuid())
+  title       String
+  description String?
+  dueDate     DateTime
+  course      Course       @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  courseId    String
+  submissions Submission[]
+}
+
+model Submission {
+  id           String     @id @default(uuid())
+  assignment   Assignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  assignmentId String
+  user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId       String
+  content      String
+  grade        Int?
+  submittedAt  DateTime   @default(now())
+}
+
+model Notification {
+  id     String @id @default(uuid())
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId String
+
+  channel NotificationChannel
+  title   String?             @db.VarChar(200)
+  body    String?
+  isRead  Boolean             @default(false)
+  sentAt  DateTime            @default(now())
+
+  @@map("notifications")
+}
+
+model Report {
+  id        String     @id @default(uuid())
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String
+  type      ModuleType
+  score     Int
+  createdAt DateTime   @default(now())
+  details   Json?
+}

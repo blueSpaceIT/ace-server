@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta http-equiv="X-UA-Compatible" content="ie=edge" />
+    <title>Email Verification</title>
+    <link
+      href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      body {
+        font-family:
+          'Sora',
+          -apple-system,
+          BlinkMacSystemFont,
+          'Segoe UI',
+          Roboto,
+          sans-serif;
+        color: #1f2937;
+        line-height: 1.5;
+        margin: 0;
+        padding: 0;
+      }
+
+      .container {
+        max-width: 560px;
+        margin: 24px auto;
+        background: #ffffff;
+        border-radius: 12px;
+        padding: 32px 24px;
+        box-shadow: 0 4px 16px rgba(131, 10, 54, 0.1);
+        text-align: center;
+        border: 1px solid #830a36;
+        position: relative;
+      }
+
+      .container::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 3px;
+        background: linear-gradient(90deg, #830a36, #e23e57);
+      }
+
+      .icon {
+        margin-bottom: 16px;
+      }
+
+      .icon img {
+        width: 40px;
+        height: 40px;
+        filter: drop-shadow(0 2px 3px rgba(131, 10, 54, 0.15));
+      }
+
+      .header {
+        border-bottom: 1px solid #e23e57;
+        padding-bottom: 12px;
+        margin-bottom: 12px;
+      }
+
+      h2 {
+        font-size: 24px;
+        font-weight: 700;
+        color: #1f2937;
+        letter-spacing: -0.015em;
+      }
+
+      p {
+        font-size: 14px;
+        color: #4b5563;
+        margin: 8px 0;
+        line-height: 1.6;
+      }
+
+      .btn {
+        display: inline-block;
+        margin: 16px 0;
+        padding: 12px 32px;
+        background-color: #830a36;
+        background: linear-gradient(90deg, #830a36, #e23e57);
+        color: #ffffff !important;
+        font-size: 14px;
+        font-weight: 600;
+        text-decoration: none;
+        border-radius: 8px;
+        box-shadow: 0 3px 10px rgba(131, 10, 54, 0.2);
+      }
+
+      .footer {
+        margin-top: 20px;
+        padding-top: 12px;
+        font-size: 12px;
+        color: #6b7280;
+        line-height: 1.6;
+        border-top: 1px solid #830a36;
+      }
+
+      .footer a {
+        color: #830a36;
+        text-decoration: none;
+        font-weight: 500;
+      }
+
+      @media (max-width: 600px) {
+        .container {
+          margin: 12px;
+          padding: 20px 16px;
+        }
+
+        .header {
+          padding-bottom: 8px;
+          margin-bottom: 8px;
+        }
+
+        h2 {
+          font-size: 20px;
+        }
+
+        p {
+          font-size: 13px;
+        }
+
+        .btn {
+          padding: 10px 24px;
+          font-size: 13px;
+        }
+
+        .footer {
+          margin-top: 16px;
+          padding-top: 8px;
+          font-size: 11px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <div class="icon">
+        <img
+          src="https://res.cloudinary.com/dzmxgvjfr/image/upload/v1759041581/Logo_avkdcb.png"
+          alt="Logo"
+        />
+      </div>
+      <div class="header">
+        <h2>Verify Your Account</h2>
+      </div>
+      <p>Hello <%= name %>,</p>
+      <p>
+        Use the following One-Time Password (OTP) to verify your email address.
+        This code will expire in 10 minutes.
+      </p>
+      <h1 style="font-size: 28px; margin: 16px 0; color: #830a36">
+        <%= otp %>
+      </h1>
+      <p>
+        If you didn’t create an account, you can safely ignore this email or
+        contact our support team.
+      </p>
+      <div class="footer">
+        &copy; <%= new Date().getFullYear() %> <%= companyName %>. All rights
+        reserved.<br />
+        <a href="<%= frontendUrl %>"><%= companyName %></a> |
+        <a href="mailto:<%= supportEmail %>">Contact Support</a>
+      </div>
+    </div>
+  </body>
+</html>

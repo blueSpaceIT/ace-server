@@ -142,7 +142,7 @@ model Student {
   id                String                 @id @default(uuid())
   userId            String                 @unique
   user              User                   @relation("UserStudent", fields: [userId], references: [id], onDelete: Cascade)
-  targetScore       Float? // e.g., 79 for PTE
+  targetScore       Float?
   examDate          DateTime? // For countdown
   enrollments       Enrollment[]
   answers           Answer[]
@@ -181,7 +181,7 @@ model Admin {
   createdMockTests     MockTest[]
   createdAt            DateTime       @default(now())
   updatedAt            DateTime       @updatedAt
-  Course               Course[]
+  course               Course[]
 
   @@map("admins")
 }
@@ -480,20 +480,20 @@ model Subscription {
 }
 
 model Payment {
-  id                String        @id @default(uuid())
-  studentId         String
-  amount            Int // BDT
-  currency          String        @default("BDT")
-  provider          String // bKash, Nagad, SSLCommerz
-  providerPaymentId String? // External ID
-  status            PaymentStatus @default(PENDING)
-  metadata          Json? // {invoice: "..."}
-  student           Student       @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  createdAt         DateTime      @default(now())
-  updatedAt         DateTime      @updatedAt
+  id                    String        @id @default(uuid())
+  studentId             String
+  amount                Int // BDT
+  currency              String        @default("BDT")
+  provider              String // bKash, Nagad, SSLCommerz
+  providerTransactionId String? // External ID
+  status                PaymentStatus @default(PENDING)
+  metadata              Json? // {invoice: "..."}
+  student               Student       @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  createdAt             DateTime      @default(now())
+  updatedAt             DateTime      @updatedAt
 
   @@index([studentId])
-  @@index([providerPaymentId])
+  @@index([providerTransactionId])
   @@map("payments")
 }
 

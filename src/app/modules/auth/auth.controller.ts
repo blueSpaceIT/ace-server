@@ -21,7 +21,7 @@ const credentialsLogin = async (
     const tokens = generateAuthTokens({
       id: user.id,
       email: user.email,
-      role: user.role,
+      userRole: user.userRole,
     });
 
     setRefreshTokenCookie(res, tokens.refreshToken);
@@ -51,7 +51,7 @@ const googleCallback = catchAsync(async (req: Request, res: Response) => {
   const tokens = generateAuthTokens({
     id: user.id,
     email: user.email,
-    role: user.role,
+    userRole: user.userRole,
   });
 
   setRefreshTokenCookie(res, tokens.refreshToken);
@@ -62,7 +62,7 @@ const googleCallback = catchAsync(async (req: Request, res: Response) => {
       id: user.id,
       name: user.name,
       email: user.email,
-      role: user.role,
+      userRole: user.userRole,
       picture: user.picture,
     }),
   );

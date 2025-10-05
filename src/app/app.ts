@@ -17,9 +17,9 @@ const app: Application = express();
 app.set('trust proxy', 1);
 
 // 🔹 Middleware
+app.use(cookieParser());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-app.use(cookieParser());
 
 app.use(
   cors({

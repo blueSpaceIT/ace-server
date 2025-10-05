@@ -3,6 +3,7 @@ import { AuthRoutes } from '../modules/auth/auth.routes';
 import { CourseRoutes } from '../modules/course/course.routes';
 import { CourseModuleRoutes } from '../modules/courseModule/courseModule.routes';
 import { EnrollmentRoutes } from '../modules/enrollment/enrollment.routes';
+import { OrganizationRoutes } from '../modules/organization/organization.routes';
 import { OtpRoutes } from '../modules/otp/otp.route';
 import { UserRoutes } from '../modules/user/user.routes';
 
@@ -20,6 +21,10 @@ const moduleRoutes = [
   {
     path: '/user',
     route: UserRoutes,
+  },
+  {
+    path: '/organization',
+    route: OrganizationRoutes,
   },
   {
     path: '/course',

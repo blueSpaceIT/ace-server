@@ -30,12 +30,12 @@ export const seedSuperAdmin = async (): Promise<void> => {
         name: 'Super Admin',
         email: config.SUPER_ADMIN_EMAIL,
         password: hashedPassword,
-        role: UserRole.SUPER_ADMIN,
+        userRole: UserRole.SUPER_ADMIN,
         status: UserStatus.ACTIVE,
         isDeleted: false,
         authProviders: {
           create: {
-            provider: AuthProviderType.credentials,
+            provider: AuthProviderType.CREDENTIALS,
             providerId: config.SUPER_ADMIN_EMAIL,
           },
         },
@@ -44,7 +44,7 @@ export const seedSuperAdmin = async (): Promise<void> => {
         id: true,
         name: true,
         email: true,
-        role: true,
+        userRole: true,
         status: true,
         createdAt: true,
       },

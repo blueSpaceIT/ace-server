@@ -15,7 +15,7 @@ router.post(
 
 router.delete(
   '/:id',
-  auth(UserRole.ADMIN, UserRole.SUPER_ADMIN, UserRole.STUDENT),
+  auth(UserRole.ADMIN, UserRole.SUPER_ADMIN),
   EnrollmentController.unenroll,
 );
 

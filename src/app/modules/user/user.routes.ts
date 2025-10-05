@@ -9,38 +9,58 @@ import { UserValidation } from './user.validation';
 
 const router = Router();
 
+// Student creation (public, for self-registration)
 router.post(
   '/create-student',
-  validateRequest(UserValidation.createUserValidationSchema),
-  UserController.createUser,
+  validateRequest(UserValidation.createStudentValidationSchema),
+  UserController.createStudent,
 );
 
-// ! Super Admin only routes
+// Teacher creation (admin only)
+router.post(
+  '/create-teacher',
+  auth(UserRole.ADMIN, UserRole.SUPER_ADMIN),
+  validateRequest(UserValidation.createTeacherValidationSchema),
+  UserController.createTeacher,
+);
+
+// Admin creation (super admin only)
 router.post(
   '/create-admin',
   auth(UserRole.SUPER_ADMIN),
-  validateRequest(UserValidation.createUserValidationSchema),
+  validateRequest(UserValidation.createAdminValidationSchema),
   UserController.createAdmin,
 );
 
+// Profile management (role-based)
 router.get(
   '/me',
-  auth(UserRole.STUDENT, UserRole.ADMIN, UserRole.SUPER_ADMIN),
+  auth(
+    UserRole.STUDENT,
+    UserRole.TEACHER,
+    UserRole.ADMIN,
+    UserRole.SUPER_ADMIN,
+  ),
   UserController.getMyProfile,
 );
 
 router.patch(
   '/me',
-  auth(UserRole.STUDENT, UserRole.ADMIN, UserRole.SUPER_ADMIN),
+  auth(
+    UserRole.STUDENT,
+    UserRole.TEACHER,
+    UserRole.ADMIN,
+    UserRole.SUPER_ADMIN,
+  ),
   multerUpload.single('picture'),
   parseBody,
   validateRequest(UserValidation.updateProfileValidationSchema),
   UserController.updateProfile,
 );
 
-
+// Admin actions
 router.patch(
-  '/:id',
+  '/:id/status',
   auth(UserRole.ADMIN, UserRole.SUPER_ADMIN),
   validateRequest(UserValidation.updateUserStatusValidationSchema),
   UserController.updateUserStatus,

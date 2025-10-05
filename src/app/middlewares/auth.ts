@@ -31,6 +31,7 @@ export const auth =
       // Check if user exists and has ACTIVE status
       const user = await prisma.user.findUnique({
         where: { id: verifiedUser.id },
+        include: { student: true, teacher: true, admin: true },
       });
 
       if (!user) {
@@ -52,12 +53,15 @@ export const auth =
       }
 
       // Check if user has required role
-      if (requiredRoles.length && !requiredRoles.includes(verifiedUser.role)) {
+      if (
+        requiredRoles.length &&
+        !requiredRoles.includes(verifiedUser.userRole)
+      ) {
         throw new ApiError(StatusCodes.FORBIDDEN, 'Forbidden');
       }
 
-      // Set user in request object
-      req.user = verifiedUser;
+      // Set user in request object with profile
+      req.user = { ...verifiedUser, profile: user };
       next();
     } catch (error) {
       next(error);

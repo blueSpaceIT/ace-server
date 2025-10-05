@@ -50,7 +50,7 @@ passport.use(
         }
 
         const isGoogleAuthenticated = user.authProviders.some(
-          (auth) => auth.provider === AuthProviderType.google,
+          (auth) => auth.provider === AuthProviderType.GOOGLE,
         );
 
         if (isGoogleAuthenticated && !user.password) {
@@ -135,11 +135,12 @@ passport.use(
               email,
               name: profile.displayName || 'Unknown User',
               picture: profile.photos?.[0]?.value,
-              role: UserRole.STUDENT,
+              userRole: UserRole.STUDENT,
               status: UserStatus.ACTIVE,
+              emailVerified: true,
               authProviders: {
                 create: {
-                  provider: AuthProviderType.google,
+                  provider: AuthProviderType.GOOGLE,
                   providerId: profile.id,
                 },
               },

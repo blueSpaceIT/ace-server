@@ -1,3 +1,4 @@
+import { UserRole } from '@prisma/client';
 import { StatusCodes } from 'http-status-codes';
 import { redisClient } from '../../config/redis.config';
 import ApiError from '../../helpers/ApiError';
@@ -8,7 +9,10 @@ import { OTP_EXPIRATION } from './otp.interface';
 import { buildOtpKey, generateOtp, renderOtpEmail } from './otp.utils';
 
 const sendOTP = async (email: string) => {
-  const user = await prisma.user.findUnique({ where: { email } });
+  const user = await prisma.user.findUnique({
+    where: { email },
+    include: { student: true, teacher: true, admin: true }, // Include profiles for full data
+  });
   if (!user) throw new ApiError(StatusCodes.NOT_FOUND, 'User not found');
   if (user.status === 'ACTIVE') {
     throw new ApiError(StatusCodes.BAD_REQUEST, 'User is already verified');
@@ -22,10 +26,10 @@ const sendOTP = async (email: string) => {
   if (existingOtp) {
     await redisClient.del(key);
   }
-  
+
   await redisClient.set(key, otp, { EX: OTP_EXPIRATION });
 
-  const html = await renderOtpEmail(user.name, otp);
+  const html = await renderOtpEmail(user.name as string, otp);
   await sendEmail.send(email, 'Verify your account', html);
 
   return { message: 'OTP sent successfully' };
@@ -53,7 +57,7 @@ const resendOTP = async (email: string) => {
   await redisClient.del(key);
   await redisClient.set(key, otp, { EX: OTP_EXPIRATION });
 
-  const html = await renderOtpEmail(user.name, otp);
+  const html = await renderOtpEmail(user.name as string, otp);
   await sendEmail.send(email, 'Verify your account', html);
 
   return { message: 'OTP resent successfully' };
@@ -61,37 +65,48 @@ const resendOTP = async (email: string) => {
 
 const verifyOTP = async (email: string, otp: string) => {
   const user = await prisma.user.findUnique({ where: { email } });
-  if (!user) throw new ApiError(StatusCodes.NOT_FOUND, 'User not found');
+
+  if (!user) {
+    throw new ApiError(StatusCodes.NOT_FOUND, 'User not found');
+  }
+
   if (user.status === 'ACTIVE') {
     throw new ApiError(StatusCodes.BAD_REQUEST, 'User is already verified');
   }
 
   const key = buildOtpKey(email);
   const savedOtp = await redisClient.get(key);
+
   if (!savedOtp || savedOtp !== otp) {
     throw new ApiError(StatusCodes.BAD_REQUEST, 'Invalid or expired OTP');
   }
 
+  const include: any = {};
+
+  if (user.userRole === UserRole.STUDENT) {
+    include.student = { include: { user: true } };
+  } else if (user.userRole === UserRole.TEACHER) {
+    include.teacher = { include: { user: true } };
+  } else if (
+    user.userRole === UserRole.ADMIN ||
+    user.userRole === UserRole.SUPER_ADMIN
+  ) {
+    include.admin = { include: { user: true } };
+  }
+
+  include.organization = true;
+
   const updatedUser = await prisma.user.update({
     where: { email },
-    data: { status: 'ACTIVE' },
-    select: {
-      id: true,
-      name: true,
-      email: true,
-      role: true,
-      status: true,
-      createdAt: true,
-      updatedAt: true,
-    },
+    data: { status: 'ACTIVE', emailVerified: true },
   });
 
   await redisClient.del(key);
 
   const tokens = generateAuthTokens({
     id: updatedUser.id,
-    email: updatedUser.email,
-    role: updatedUser.role,
+    email: updatedUser.email as string,
+    userRole: updatedUser.userRole,
   });
 
   return { user: updatedUser, ...tokens };

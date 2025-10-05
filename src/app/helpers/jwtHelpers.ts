@@ -24,16 +24,16 @@ export const jwtHelpers = {
 export const generateAuthTokens = (user: {
   id: string;
   email: string;
-  role: string;
+  userRole: string;
 }): { accessToken: string; refreshToken: string } => {
   const accessToken = jwtHelpers.generateToken(
-    { id: user.id, email: user.email, role: user.role },
+    { id: user.id, email: user.email, userRole: user.userRole },
     config.JWT_ACCESS_SECRET as Secret,
     config.JWT_ACCESS_EXPIRES,
   );
 
   const refreshToken = jwtHelpers.generateToken(
-    { id: user.id, email: user.email, role: user.role },
+    { id: user.id, email: user.email, userRole: user.userRole },
     config.JWT_REFRESH_SECRET as Secret,
     config.JWT_REFRESH_EXPIRES,
   );

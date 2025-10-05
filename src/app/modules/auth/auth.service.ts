@@ -35,7 +35,7 @@ const refreshToken = async (token?: string | null) => {
   }
 
   const accessToken = jwtHelpers.generateToken(
-    { id: userData.id, email: userData.email, role: userData.role },
+    { id: userData.id, email: userData.email, userRole: userData.userRole },
     config.JWT_ACCESS_SECRET as Secret,
     config.JWT_ACCESS_EXPIRES as string,
   );
@@ -110,7 +110,7 @@ const forgotPassword = async (payload: { email: string }) => {
     supportEmail: config.SUPPORT_EMAIL,
   });
 
-  await sendEmail.send(user.email, 'Reset Your Password', html);
+  await sendEmail.send(user.email as string, 'Reset Your Password', html);
 
   return { message: 'Password reset email sent successfully' };
 };
@@ -136,8 +136,8 @@ const resetPassword = async (token: string, newPassword: string) => {
 
   const tokens = generateAuthTokens({
     id: user.id,
-    email: user.email,
-    role: user.role,
+    email: user.email as string,
+    userRole: user.userRole,
   });
 
   return tokens;

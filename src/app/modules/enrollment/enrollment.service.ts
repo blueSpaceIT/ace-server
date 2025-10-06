@@ -1,4 +1,4 @@
-import { Prisma } from '@prisma/client';
+import { Prisma, UserRole } from '@prisma/client';
 import { StatusCodes } from 'http-status-codes';
 import ApiError from '../../helpers/ApiError';
 import { paginationHelper } from '../../helpers/paginationHelper';
@@ -7,24 +7,42 @@ import { IPaginationOptions } from '../../interfaces/pagination';
 import prisma from '../../shared/prisma';
 
 const getEnrollments = async (
+  user: IAuthUser,
   filters: Record<string, unknown>,
   options: IPaginationOptions,
 ) => {
   const { page, limit, skip, sortBy, sortOrder } =
     paginationHelper.calculatePagination(options);
+  const { courseId, studentId, ...filterData } = filters;
 
-  const { courseId, ...filterData } = filters;
-  const andConditions: Prisma.enrollmentWhereInput[] = [];
+  const andConditions: Prisma.EnrollmentWhereInput[] = [];
 
-  // Only not deleted enrollments
+  // Exclude deleted
   andConditions.push({ isDeleted: false });
 
-  // Exact filters
-  if (courseId) {
-    andConditions.push({ courseId: String(courseId) });
+  // Student filter: Own enrollments only - Fetch student ID first
+  let currentStudentId: string | undefined;
+  if (user.userRole === UserRole.STUDENT) {
+    const student = await prisma.student.findUnique({
+      where: { userId: user.id },
+    });
+    if (!student)
+      throw new ApiError(StatusCodes.BAD_REQUEST, 'Student profile not found');
+    currentStudentId = student.id;
+    andConditions.push({ studentId: currentStudentId });
   }
 
-  if (Object.keys(filterData).length) {
+  // Filters
+  if (courseId) {
+    andConditions.push({ courseId: courseId as string });
+  }
+  if (
+    studentId &&
+    (user.userRole === UserRole.ADMIN || user.userRole === UserRole.SUPER_ADMIN)
+  ) {
+    andConditions.push({ studentId: studentId as string });
+  }
+  if (Object.keys(filterData).length > 0) {
     andConditions.push({
       AND: Object.entries(filterData).map(([key, value]) => ({
         [key]: { equals: value },
@@ -32,33 +50,35 @@ const getEnrollments = async (
     });
   }
 
-  const whereConditions: Prisma.enrollmentWhereInput =
-    andConditions.length > 0 ? { AND: andConditions } : {};
+  const whereConditions: Prisma.EnrollmentWhereInput =
+    andConditions.length > 0 ? { AND: andConditions } : { isDeleted: false };
+
+  const includeData = {
+    student: {
+      include: { user: { select: { id: true, name: true, email: true } } },
+    },
+    course: {
+      select: {
+        id: true,
+        title: true,
+        slug: true,
+        price: true,
+        thumbnail: true,
+        visibility: true,
+        featured: true,
+        examType: true,
+        organization: { select: { id: true, name: true } },
+      },
+    },
+  };
 
   const [enrollments, total] = await prisma.$transaction([
     prisma.enrollment.findMany({
       where: whereConditions,
+      include: includeData,
       skip,
       take: limit,
-      orderBy: { [sortBy]: sortOrder },
-      select: {
-        id: true,
-        userId: true,
-        courseId: true,
-        course: {
-          select: {
-            id: true,
-            title: true,
-            slug: true,
-            price: true,
-            thumbnail: true,
-            visibility: true,
-            featured: true,
-          },
-        },
-        createdAt: true,
-        updatedAt: true,
-      },
+      orderBy: { [sortBy as string]: sortOrder },
     }),
     prisma.enrollment.count({ where: whereConditions }),
   ]);
@@ -66,60 +86,124 @@ const getEnrollments = async (
   return { meta: { page, limit, total }, data: enrollments };
 };
 
-const enroll = async (payload: { courseId: string }, user: IAuthUser) => {
-  // Check if course exists, is not deleted, and visible
+const enroll = async (user: IAuthUser, payload: { courseId: string }) => {
+  // Get student ID
+  const student = await prisma.student.findUnique({
+    where: { userId: user.id },
+  });
+  if (!student) {
+    throw new ApiError(StatusCodes.BAD_REQUEST, 'Student profile not found');
+  }
+
+  // Check course exists, visible, not deleted
   const course = await prisma.course.findUnique({
-    where: { id: payload.courseId },
-    select: { id: true, isDeleted: true, visibility: true },
+    where: { id: payload.courseId, isDeleted: false },
   });
 
-  if (!course || course.isDeleted) {
-    throw new ApiError(StatusCodes.NOT_FOUND, 'Course not found or deleted');
+  if (!course) {
+    throw new ApiError(StatusCodes.NOT_FOUND, 'Course not found');
   }
 
-  if (!course.visibility) {
-    throw new ApiError(StatusCodes.BAD_REQUEST, 'Course is not visible');
+  if (
+    !course.visibility &&
+    user.userRole !== UserRole.SUPER_ADMIN &&
+    user.userRole !== UserRole.ADMIN
+  ) {
+    throw new ApiError(StatusCodes.FORBIDDEN, 'Course is not visible');
   }
 
-  // Check if user is already enrolled
-  const enrollmentExists = await prisma.enrollment.findUnique({
+  // Check if already enrolled
+  const existing = await prisma.enrollment.findUnique({
     where: {
-      userId_courseId: { userId: user.id, courseId: payload.courseId },
+      studentId_courseId: { studentId: student.id, courseId: payload.courseId },
     },
   });
 
-  if (enrollmentExists) {
-    throw new ApiError(
-      StatusCodes.BAD_REQUEST,
-      'User is already enrolled in this course',
-    );
+  if (existing && !existing.isDeleted) {
+    throw new ApiError(StatusCodes.CONFLICT, 'Already enrolled in this course');
   }
 
-  return prisma.enrollment.create({
-    data: { userId: user.id, courseId: payload.courseId },
-    select: {
-      id: true,
-      userId: true,
-      courseId: true,
-      createdAt: true,
+  // Restore if soft deleted, or create new
+  if (existing) {
+    const restored = await prisma.enrollment.update({
+      where: { id: existing.id },
+      data: { isDeleted: false },
+      include: {
+        student: { select: { id: true } },
+        course: { select: { id: true, title: true } },
+      },
+    });
+    return restored;
+  }
+
+  const enrollment = await prisma.enrollment.create({
+    data: {
+      studentId: student.id,
+      courseId: payload.courseId,
+    },
+    include: {
+      student: { select: { id: true } },
+      course: { select: { id: true, title: true } },
     },
   });
+
+  return enrollment;
 };
 
 const unenroll = async (id: string, user: IAuthUser) => {
   const enrollment = await prisma.enrollment.findUnique({
-    where: { id },
-    select: { id: true, userId: true },
+    where: { id, isDeleted: false },
+    include: {
+      student: { select: { id: true } },
+    },
   });
 
-  if (!enrollment || enrollment.userId !== user.id) {
+  if (!enrollment) {
     throw new ApiError(StatusCodes.NOT_FOUND, 'Enrollment not found');
   }
 
-  return prisma.enrollment.update({
+  // Student can only unenroll own
+  if (user.userRole === UserRole.STUDENT && enrollment.studentId !== user.id) {
+    throw new ApiError(
+      StatusCodes.FORBIDDEN,
+      'Can only unenroll own enrollment',
+    );
+  }
+
+  // Admin check
+  if (
+    user.userRole === UserRole.ADMIN ||
+    user.userRole === UserRole.SUPER_ADMIN
+  ) {
+    const admin = await prisma.admin.findUnique({ where: { userId: user.id } });
+    if (!admin)
+      throw new ApiError(StatusCodes.BAD_REQUEST, 'Admin profile not found');
+    const userWithOrg = await prisma.user.findUnique({
+      where: { id: user.id },
+      select: { organizationId: true },
+    });
+    const course = await prisma.course.findUnique({
+      where: { id: enrollment.courseId },
+      select: { organizationId: true },
+    });
+    if (
+      course?.organizationId &&
+      userWithOrg?.organizationId !== course.organizationId &&
+      user.userRole !== UserRole.SUPER_ADMIN
+    ) {
+      throw new ApiError(
+        StatusCodes.FORBIDDEN,
+        'Can only unenroll in own organization',
+      );
+    }
+  }
+
+  const updated = await prisma.enrollment.update({
     where: { id },
     data: { isDeleted: true },
   });
+
+  return updated;
 };
 
 export const EnrollmentService = {

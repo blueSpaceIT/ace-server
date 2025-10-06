@@ -5,11 +5,15 @@ import { EnrollmentController } from './enrollment.controller';
 
 const router = Router();
 
-router.get('/', EnrollmentController.getEnrollments);
+router.get(
+  '/',
+  auth(UserRole.STUDENT, UserRole.ADMIN, UserRole.SUPER_ADMIN),
+  EnrollmentController.getEnrollments,
+);
 
 router.post(
   '/',
-  auth(UserRole.ADMIN, UserRole.SUPER_ADMIN, UserRole.STUDENT),
+  auth(UserRole.STUDENT, UserRole.ADMIN, UserRole.SUPER_ADMIN),
   EnrollmentController.enroll,
 );
 

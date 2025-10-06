@@ -4,13 +4,15 @@ import { IAuthUser } from '../../interfaces/common';
 import catchAsync from '../../shared/catchAsync';
 import pick from '../../shared/pick';
 import sendResponse from '../../shared/sendResponse';
+import { enrollmentFilterableFields } from './enrollment.constant';
 import { EnrollmentService } from './enrollment.service';
 
 const getEnrollments = catchAsync(async (req: Request, res: Response) => {
-  const filters = pick(req.query, ['courseId']);
+  const user = req.user as IAuthUser;
+  const filters = pick(req.query, enrollmentFilterableFields);
   const options = pick(req.query, ['limit', 'page', 'sortBy', 'sortOrder']);
 
-  const result = await EnrollmentService.getEnrollments(filters, options);
+  const result = await EnrollmentService.getEnrollments(user, filters, options);
 
   sendResponse(res, {
     statusCode: StatusCodes.OK,
@@ -22,29 +24,25 @@ const getEnrollments = catchAsync(async (req: Request, res: Response) => {
 });
 
 const enroll = catchAsync(async (req: Request, res: Response) => {
-  const result = await EnrollmentService.enroll(
-    req.body,
-    req.user as IAuthUser,
-  );
+  const user = req.user as IAuthUser;
+  const result = await EnrollmentService.enroll(user, req.body);
 
   sendResponse(res, {
     statusCode: StatusCodes.CREATED,
     success: true,
-    message: 'Enroll successfully',
+    message: 'Enrollment successful',
     data: result,
   });
 });
 
 const unenroll = catchAsync(async (req: Request, res: Response) => {
-  const result = await EnrollmentService.unenroll(
-    req.params.id,
-    req.user as IAuthUser,
-  );
+  const user = req.user as IAuthUser;
+  const result = await EnrollmentService.unenroll(req.params.id, user);
 
   sendResponse(res, {
     statusCode: StatusCodes.OK,
     success: true,
-    message: 'Enrollment deleted successfully',
+    message: 'Unenrolled successfully',
     data: result,
   });
 });

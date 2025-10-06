@@ -11,7 +11,7 @@ const router = Router();
 
 router.post(
   '/',
-  auth(UserRole.ADMIN, UserRole.SUPER_ADMIN),
+  auth(UserRole.ADMIN, UserRole.SUPER_ADMIN, UserRole.TEACHER),
   multerUpload.single('thumbnail'),
   parseBody,
   validateRequest(CourseValidation.createCourseValidationSchema),
@@ -22,7 +22,7 @@ router.get('/', CourseController.getAllCourses);
 
 router.get(
   '/all',
-  auth(UserRole.ADMIN, UserRole.SUPER_ADMIN),
+  auth(UserRole.ADMIN, UserRole.SUPER_ADMIN, UserRole.TEACHER),
   CourseController.getAllCourses,
 );
 
@@ -30,7 +30,7 @@ router.get('/:slug', CourseController.getCourseBySlug);
 
 router.patch(
   '/:id',
-  auth(UserRole.ADMIN, UserRole.SUPER_ADMIN),
+  auth(UserRole.ADMIN, UserRole.SUPER_ADMIN, UserRole.TEACHER),
   multerUpload.single('thumbnail'),
   parseBody,
   validateRequest(CourseValidation.updateCourseValidationSchema),
@@ -39,25 +39,25 @@ router.patch(
 
 router.patch(
   '/:id/visibility',
-  auth(UserRole.ADMIN, UserRole.SUPER_ADMIN),
+  auth(UserRole.ADMIN, UserRole.SUPER_ADMIN, UserRole.TEACHER),
   CourseController.toggleCourseVisibility,
 );
 
 router.patch(
   '/:id/featured',
-  auth(UserRole.ADMIN, UserRole.SUPER_ADMIN),
+  auth(UserRole.ADMIN, UserRole.SUPER_ADMIN, UserRole.TEACHER),
   CourseController.toggleCourseFeatured,
 );
 
 router.patch(
   '/:id/restore',
-  auth(UserRole.ADMIN, UserRole.SUPER_ADMIN),
+  auth(UserRole.ADMIN, UserRole.SUPER_ADMIN, UserRole.TEACHER),
   CourseController.restoreCourse,
 );
 
 router.delete(
   '/:id',
-  auth(UserRole.ADMIN, UserRole.SUPER_ADMIN),
+  auth(UserRole.ADMIN, UserRole.SUPER_ADMIN, UserRole.TEACHER),
   CourseController.deleteCourse,
 );
 

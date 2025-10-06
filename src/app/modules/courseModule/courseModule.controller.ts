@@ -9,7 +9,6 @@ import { CourseModuleService } from './courseModule.service';
 
 const createModule = catchAsync(async (req: Request, res: Response) => {
   const module = await CourseModuleService.createModule(req.body);
-
   sendResponse(res, {
     statusCode: StatusCodes.CREATED,
     success: true,
@@ -39,7 +38,6 @@ const getModules = catchAsync(async (req: Request, res: Response) => {
 
 const getModuleById = catchAsync(async (req: Request, res: Response) => {
   const module = await CourseModuleService.getModuleById(req.params.moduleId);
-
   sendResponse(res, {
     statusCode: StatusCodes.OK,
     success: true,
@@ -53,7 +51,6 @@ const updateModule = catchAsync(async (req: Request, res: Response) => {
     req.params.moduleId,
     req.body,
   );
-
   sendResponse(res, {
     statusCode: StatusCodes.OK,
     success: true,
@@ -64,7 +61,6 @@ const updateModule = catchAsync(async (req: Request, res: Response) => {
 
 const restoreModule = catchAsync(async (req: Request, res: Response) => {
   const restored = await CourseModuleService.restoreModule(req.params.moduleId);
-
   sendResponse(res, {
     statusCode: StatusCodes.OK,
     success: true,
@@ -75,7 +71,6 @@ const restoreModule = catchAsync(async (req: Request, res: Response) => {
 
 const deleteModule = catchAsync(async (req: Request, res: Response) => {
   const deleted = await CourseModuleService.deleteModule(req.params.moduleId);
-
   sendResponse(res, {
     statusCode: StatusCodes.OK,
     success: true,
@@ -88,11 +83,10 @@ const hardDeleteModule = catchAsync(async (req: Request, res: Response) => {
   const deleted = await CourseModuleService.hardDeleteModule(
     req.params.moduleId,
   );
-
   sendResponse(res, {
     statusCode: StatusCodes.OK,
     success: true,
-    message: `Module ${deleted.title} deleted successfully`,
+    message: `Module ${deleted.title} permanently deleted successfully`,
     data: null,
   });
 });

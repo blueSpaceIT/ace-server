@@ -19,10 +19,25 @@ const createCourse = catchAsync(async (req: Request, res: Response) => {
   });
 });
 
+const updateCourse = catchAsync(async (req: Request, res: Response) => {
+  const result = await CourseService.updateCourse(
+    req.params.id,
+    req.body,
+    req.file,
+  );
+
+  sendResponse(res, {
+    statusCode: StatusCodes.OK,
+    success: true,
+    message: 'Course updated successfully',
+    data: result,
+  });
+});
+
 const getAllCourses = catchAsync(async (req: Request, res: Response) => {
   const filters = pick(req.query, courseFilterableFields);
   const options = pick(req.query, ['limit', 'page', 'sortBy', 'sortOrder']);
-
+  console.log(req.query);
   const result = await CourseService.getAllCourses(
     req.user as IAuthUser,
     filters,
@@ -39,7 +54,10 @@ const getAllCourses = catchAsync(async (req: Request, res: Response) => {
 });
 
 const getCourseBySlug = catchAsync(async (req: Request, res: Response) => {
-  const result = await CourseService.getCourseBySlug(req.params.slug);
+  const result = await CourseService.getCourseBySlug(
+    req.params.slug,
+    req.user as IAuthUser,
+  );
 
   sendResponse(res, {
     statusCode: StatusCodes.OK,
@@ -49,65 +67,61 @@ const getCourseBySlug = catchAsync(async (req: Request, res: Response) => {
   });
 });
 
-const updateCourse = catchAsync(async (req: Request, res: Response) => {
-  const result = await CourseService.updateCourse(
-    req.params.id,
-    req.body,
-    req.file,
-  );
-
-  sendResponse(res, {
-    statusCode: StatusCodes.OK,
-    success: true,
-    message: 'Course updated successfully',
-    data: result,
-  });
-});
-
 const toggleCourseVisibility = catchAsync(
   async (req: Request, res: Response) => {
     const updatedCourse = await CourseService.toggleCourseVisibility(
       req.params.id,
+      req.user as IAuthUser,
     );
 
     sendResponse(res, {
       statusCode: StatusCodes.OK,
       success: true,
-      message: `Course ${updatedCourse.title} is now ${updatedCourse.visibility ? 'Published to students' : 'Unpublished to students'}.`,
+      message: `Course ${updatedCourse.title} is now ${
+        updatedCourse.visibility ? 'Published' : 'Unpublished'
+      }.`,
       data: null,
     });
   },
 );
 
 const toggleCourseFeatured = catchAsync(async (req: Request, res: Response) => {
-  const updatedCourse = await CourseService.toggleCourseFeatured(req.params.id);
+  const updatedCourse = await CourseService.toggleCourseFeatured(
+    req.params.id,
+    req.user as IAuthUser,
+  );
 
   sendResponse(res, {
     statusCode: StatusCodes.OK,
     success: true,
-    message: `Course ${updatedCourse.title} is now marked as ${updatedCourse.featured ? 'Featured' : 'Not Featured'}.`,
+    message: `Course ${updatedCourse.title} is now ${
+      updatedCourse.featured ? 'marked as Featured' : 'no longer Featured'
+    }.`,
     data: null,
   });
 });
 
 const restoreCourse = catchAsync(async (req: Request, res: Response) => {
-  const restoredCourse = await CourseService.restoreCourse(req.params.id);
+  const restoredCourse = await CourseService.restoreCourse(
+    req.params.id,
+    req.user as IAuthUser,
+  );
 
   sendResponse(res, {
     statusCode: StatusCodes.OK,
     success: true,
-    message: `Course ${restoredCourse.title} has been restored and is now active again.`,
+    message: `Course ${restoredCourse.title} has been successfully restored.`,
     data: null,
   });
 });
 
 const deleteCourse = catchAsync(async (req: Request, res: Response) => {
-  const deletedCourse = await CourseService.deleteCourse(req.params.id);
+  await CourseService.deleteCourse(req.params.id, req.user as IAuthUser);
 
   sendResponse(res, {
     statusCode: StatusCodes.OK,
     success: true,
-    message: `Course ${deletedCourse.title} has been deleted successfully and is no longer available.`,
+    message: 'Course deleted successfully and is no longer available.',
     data: null,
   });
 });

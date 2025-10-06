@@ -1,4 +1,4 @@
-import { Course, Prisma } from '@prisma/client';
+import { Course, Prisma, UserRole } from '@prisma/client';
 import { StatusCodes } from 'http-status-codes';
 import slugify from 'slugify';
 import ApiError from '../../helpers/ApiError';
@@ -7,23 +7,146 @@ import { IAuthUser } from '../../interfaces/common';
 import { IFile } from '../../interfaces/file';
 import { IPaginationOptions } from '../../interfaces/pagination';
 import prisma from '../../shared/prisma';
+import { CreateCourseInput } from './course.interface';
 
-const createCourse = async (user: IAuthUser, payload: any, file?: IFile) => {
+const createCourse = async (
+  user: IAuthUser,
+  payload: CreateCourseInput,
+  file?: IFile,
+): Promise<Course> => {
   const slug = slugify(payload.title, { lower: true, strict: true });
 
+  // Check for duplicate slug
+  const existingCourse = await prisma.course.findUnique({ where: { slug } });
+  if (existingCourse) {
+    throw new ApiError(
+      StatusCodes.CONFLICT,
+      'A course with this title already exists',
+    );
+  }
+
+  // Handle thumbnail
   let thumbnailUrl: string | undefined;
   if (file) {
     thumbnailUrl = file.path;
   }
 
-  return prisma.course.create({
+  // Determine creator type
+  let adminId: string | undefined;
+  let teacherId: string | undefined;
+
+  if (
+    user.userRole === UserRole.ADMIN ||
+    user.userRole === UserRole.SUPER_ADMIN
+  ) {
+    const admin = await prisma.admin.findUnique({ where: { userId: user.id } });
+    if (!admin)
+      throw new ApiError(StatusCodes.FORBIDDEN, 'Admin profile not found');
+    adminId = admin.id;
+  } else if (user.userRole === UserRole.TEACHER) {
+    const teacher = await prisma.teacher.findUnique({
+      where: { userId: user.id },
+    });
+    if (!teacher)
+      throw new ApiError(StatusCodes.FORBIDDEN, 'Teacher profile not found');
+    teacherId = teacher.id;
+  } else {
+    throw new ApiError(
+      StatusCodes.FORBIDDEN,
+      'Only Admins or Teachers can create courses',
+    );
+  }
+
+  // Create course
+  const course = await prisma.course.create({
     data: {
-      ...payload,
+      organizationId: payload.organizationId || null,
+      title: payload.title,
       slug,
+      description: payload.description,
+      price: payload.price ?? 0,
+      examType: payload.examType,
       thumbnail: thumbnailUrl,
-      createdById: user.id,
+      metadata: payload.metadata as Prisma.InputJsonValue | undefined,
+      adminId,
+      teacherId,
+      visibility: payload.visibility ?? false,
+      featured: payload.featured ?? false,
+    },
+    include: {
+      organization: { select: { id: true, name: true } },
+      teacher: {
+        select: { id: true, user: { select: { id: true, name: true } } },
+      },
+      admin: {
+        select: { id: true, user: { select: { id: true, name: true } } },
+      },
     },
   });
+
+  return course;
+};
+
+const updateCourse = async (
+  id: string,
+  payload: Partial<Course>,
+  file?: IFile,
+): Promise<Course> => {
+  const existingCourse = await prisma.course.findUnique({ where: { id } });
+
+  if (!existingCourse || existingCourse.isDeleted) {
+    throw new ApiError(StatusCodes.NOT_FOUND, 'Course not found or deleted');
+  }
+
+  const updateData: Prisma.CourseUpdateInput = {};
+
+  // Update slug if title changes (and slug is not provided)
+  if (payload.title) {
+    const newSlug = slugify(payload.title, { lower: true, strict: true });
+    const duplicateSlug = await prisma.course.findFirst({
+      where: { slug: newSlug, id: { not: id } },
+    });
+    if (duplicateSlug) {
+      throw new ApiError(
+        StatusCodes.CONFLICT,
+        'Another course with the same title already exists',
+      );
+    }
+    updateData.title = payload.title;
+    updateData.slug = newSlug;
+  }
+
+  // Other updatable fields
+  if (payload.description !== undefined)
+    updateData.description = payload.description;
+  if (payload.price !== undefined) updateData.price = payload.price;
+  if (payload.examType !== undefined) updateData.examType = payload.examType;
+  if (payload.metadata !== undefined)
+    updateData.metadata = payload.metadata as Prisma.InputJsonValue;
+  if (payload.organizationId !== undefined) {
+    if (payload.organizationId) {
+      updateData.organization = { connect: { id: payload.organizationId } };
+    } else {
+      updateData.organization = { disconnect: true };
+    }
+  }
+  if (file) updateData.thumbnail = file.path;
+
+  const updatedCourse = await prisma.course.update({
+    where: { id },
+    data: updateData,
+    include: {
+      organization: { select: { id: true, name: true } },
+      teacher: {
+        select: { id: true, user: { select: { id: true, name: true } } },
+      },
+      admin: {
+        select: { id: true, user: { select: { id: true, name: true } } },
+      },
+    },
+  });
+
+  return updatedCourse;
 };
 
 const getAllCourses = async (
@@ -34,11 +157,11 @@ const getAllCourses = async (
   const { page, limit, skip, sortBy, sortOrder } =
     paginationHelper.calculatePagination(options);
 
-  const { searchTerm, ...filterData } = params;
+  const { searchTerm, minPrice, maxPrice, ...filterData } = params;
 
   const andConditions: Prisma.CourseWhereInput[] = [];
 
-  // 🔍 Global search
+  //  Global search
   if (searchTerm) {
     andConditions.push({
       OR: ['title', 'description'].map((field) => ({
@@ -47,7 +170,7 @@ const getAllCourses = async (
     });
   }
 
-  // 🎯 Exact filters
+  //  Exact filters
   if (Object.keys(filterData).length) {
     andConditions.push({
       AND: Object.entries(filterData).map(([key, value]) => ({
@@ -56,9 +179,12 @@ const getAllCourses = async (
     });
   }
 
-  // 👀 Visibility rules: Non-admins only see visible courses
-  if (!user || (user.role !== 'ADMIN' && user.role !== 'SUPER_ADMIN')) {
-    andConditions.push({ visibility: true });
+  // Visibility: Non-admins only see visible & not deleted courses
+  if (!user || (user.userRole !== 'ADMIN' && user.userRole !== 'SUPER_ADMIN')) {
+    andConditions.push({ visibility: true, isDeleted: false });
+  } else {
+    // Admins can see all courses including deleted
+    andConditions.push({ isDeleted: false });
   }
 
   const whereConditions: Prisma.CourseWhereInput =
@@ -69,17 +195,19 @@ const getAllCourses = async (
       where: whereConditions,
       skip,
       take: limit,
-      orderBy: { [sortBy]: sortOrder },
-      select: {
-        id: true,
-        title: true,
-        slug: true,
-        price: true,
-        thumbnail: true,
-        visibility: true,
-        featured: true,
-        createdAt: true,
-        updatedAt: true,
+      orderBy: sortBy ? { [sortBy]: sortOrder } : { createdAt: 'desc' },
+      include: {
+        organization: { select: { id: true, name: true, slug: true } },
+        teacher: {
+          include: {
+            user: { select: { id: true, name: true, picture: true } },
+          },
+        },
+        admin: {
+          include: {
+            user: { select: { id: true, name: true, picture: true } },
+          },
+        },
       },
     }),
     prisma.course.count({ where: whereConditions }),
@@ -91,180 +219,136 @@ const getAllCourses = async (
   };
 };
 
-const getCourseBySlug = async (slug: string) => {
-  const course = await prisma.course.findUnique({
-    where: { slug },
+const getCourseBySlug = async (slug: string, user?: IAuthUser) => {
+  const whereClause: Prisma.CourseWhereInput = { slug, isDeleted: false };
+
+  const includeEnrollments =
+    user && user.userRole === UserRole.STUDENT
+      ? { where: { student: { userId: user.id } } }
+      : undefined;
+
+  const course = await prisma.course.findFirst({
+    where: whereClause,
     include: {
-      createdBy: {
-        select: {
-          id: true,
-          name: true,
-          email: true,
-          picture: true,
-        },
+      modules: { orderBy: { order: 'asc' } },
+      organization: { select: { id: true, name: true, slug: true } },
+      teacher: {
+        include: { user: { select: { id: true, name: true, picture: true } } },
       },
+      admin: {
+        include: { user: { select: { id: true, name: true, picture: true } } },
+      },
+      enrollments: includeEnrollments,
     },
   });
 
-  if (!course || course.isDeleted || course.visibility === false) {
+  if (!course) {
     throw new ApiError(StatusCodes.NOT_FOUND, 'Course not found');
   }
 
   return course;
 };
 
-const updateCourse = async (
-  id: string,
-  payload: Partial<Course>,
-  file?: IFile,
-) => {
-  const course = await prisma.course.findUnique({
-    where: { id },
-    select: { id: true, isDeleted: true },
-  });
-
-  if (!course || course.isDeleted) {
-    throw new ApiError(StatusCodes.NOT_FOUND, 'Course not found');
-  }
-
-  const updateData: Prisma.CourseUpdateInput = {};
-
-  if (payload.title) {
-    updateData.title = payload.title;
-    updateData.slug = slugify(payload.title, { lower: true, strict: true });
-  }
-  if (payload.description !== undefined)
-    updateData.description = payload.description;
-  if (payload.price !== undefined) updateData.price = payload.price;
-  if (payload.metadata !== undefined)
-    updateData.metadata = payload.metadata as Prisma.InputJsonValue;
-  if (file) updateData.thumbnail = file.path;
-
-  const updatedCourse = await prisma.course.update({
-    where: { id },
-    data: updateData,
-    select: {
-      id: true,
-      title: true,
-      slug: true,
-      description: true,
-      price: true,
-      thumbnail: true,
-      visibility: true,
-      featured: true,
-      metadata: true,
-      createdAt: true,
-      updatedAt: true,
-    },
-  });
-
-  return updatedCourse;
-};
-
 const toggleCourseVisibility = async (
   id: string,
-): Promise<{ title: string; visibility: boolean }> => {
+  user: IAuthUser,
+): Promise<Pick<Course, 'id' | 'title' | 'visibility'>> => {
   const course = await prisma.course.findUnique({
-    where: { id },
-    select: { id: true, title: true, visibility: true, isDeleted: true },
+    where: { id, isDeleted: false },
   });
+  if (!course) throw new ApiError(StatusCodes.NOT_FOUND, 'Course not found');
 
-  if (!course) {
-    throw new ApiError(StatusCodes.NOT_FOUND, 'Course not found');
-  }
-
-  if (course.isDeleted) {
+  // Only teachers can modify their own courses
+  if (user.userRole === UserRole.TEACHER && course.teacherId !== user.id) {
     throw new ApiError(
-      StatusCodes.BAD_REQUEST,
-      'Deleted course cannot be updated',
+      StatusCodes.FORBIDDEN,
+      'You can only modify your own courses',
     );
   }
 
-  const updated = await prisma.course.update({
+  return prisma.course.update({
     where: { id },
     data: { visibility: !course.visibility },
-    select: { title: true, visibility: true },
+    select: { id: true, title: true, visibility: true },
   });
-
-  return updated;
 };
 
 const toggleCourseFeatured = async (
   id: string,
-): Promise<{ title: string; featured: boolean }> => {
+  user: IAuthUser,
+): Promise<Pick<Course, 'id' | 'title' | 'featured'>> => {
   const course = await prisma.course.findUnique({
-    where: { id },
-    select: {
-      id: true,
-      title: true,
-      featured: true,
-      visibility: true,
-      isDeleted: true,
-    },
+    where: { id, isDeleted: false },
   });
-
-  if (!course) {
-    throw new ApiError(StatusCodes.NOT_FOUND, 'Course not found');
-  }
-
-  if (course.isDeleted) {
+  if (!course) throw new ApiError(StatusCodes.NOT_FOUND, 'Course not found');
+  if (!course.visibility)
     throw new ApiError(
       StatusCodes.BAD_REQUEST,
-      'Deleted course cannot be updated',
+      'Only visible courses can be featured',
+    );
+
+  // Only teachers can modify their own courses
+  if (user.userRole === UserRole.TEACHER && course.teacherId !== user.id) {
+    throw new ApiError(
+      StatusCodes.FORBIDDEN,
+      'You can only modify your own courses',
     );
   }
 
-  if (!course.visibility) {
-    throw new ApiError(
-      StatusCodes.BAD_REQUEST,
-      'Only visible courses can be marked as featured',
-    );
-  }
-
-  const updated = await prisma.course.update({
+  return prisma.course.update({
     where: { id },
     data: { featured: !course.featured },
-    select: { title: true, featured: true },
+    select: { id: true, title: true, featured: true },
   });
-
-  return updated;
 };
 
-const restoreCourse = async (id: string): Promise<{ title: string }> => {
-  const course = await prisma.course.findUnique({
-    where: { id },
-    select: { id: true, title: true, isDeleted: true },
-  });
+const restoreCourse = async (
+  id: string,
+  user: IAuthUser,
+): Promise<Pick<Course, 'id' | 'title'>> => {
+  const course = await prisma.course.findUnique({ where: { id } });
   if (!course || !course.isDeleted)
     throw new ApiError(
       StatusCodes.NOT_FOUND,
       'Course not found or already active',
     );
 
-  const restored = await prisma.course.update({
+  if (
+    !(
+      user.userRole === UserRole.ADMIN || user.userRole === UserRole.SUPER_ADMIN
+    )
+  ) {
+    throw new ApiError(
+      StatusCodes.FORBIDDEN,
+      'Only admins can restore courses',
+    );
+  }
+
+  return prisma.course.update({
     where: { id },
     data: { isDeleted: false },
-    select: { title: true },
+    select: { id: true, title: true },
   });
-
-  return restored;
 };
 
-const deleteCourse = async (id: string): Promise<{ title: string }> => {
+const deleteCourse = async (id: string, user: IAuthUser): Promise<void> => {
   const course = await prisma.course.findUnique({
-    where: { id },
-    select: { id: true, title: true, isDeleted: true },
+    where: { id, isDeleted: false },
   });
-  if (!course || course.isDeleted)
-    throw new ApiError(StatusCodes.NOT_FOUND, 'Course not found');
+  if (!course) throw new ApiError(StatusCodes.NOT_FOUND, 'Course not found');
 
-  const deleted = await prisma.course.update({
+  if (
+    !(
+      user.userRole === UserRole.ADMIN || user.userRole === UserRole.SUPER_ADMIN
+    )
+  ) {
+    throw new ApiError(StatusCodes.FORBIDDEN, 'Only admins can delete courses');
+  }
+
+  await prisma.course.update({
     where: { id },
     data: { isDeleted: true },
-    select: { title: true },
   });
-
-  return deleted;
 };
 
 export const CourseService = {

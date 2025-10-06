@@ -35,12 +35,11 @@ const getModules = async (
 ) => {
   const { page, limit, skip, sortBy, sortOrder } =
     paginationHelper.calculatePagination(options);
-
-  const { searchTerm, ...filterData } = params;
+  const { searchTerm, moduleType, courseId, isDeleted } = params;
 
   const andConditions: Prisma.CourseModuleWhereInput[] = [];
 
-  // 🔍 Global search
+  // Global search
   if (searchTerm) {
     andConditions.push({
       OR: moduleSearchableFields.map((field) => ({
@@ -49,17 +48,17 @@ const getModules = async (
     });
   }
 
-  // 🎯 Exact filters
-  if (Object.keys(filterData).length) {
+  // Exact filters
+  if (moduleType)
     andConditions.push({
-      AND: Object.entries(filterData).map(([key, value]) => ({
-        [key]: { equals: value },
-      })),
+      moduleType: moduleType as Prisma.EnumModuleTypeFilter,
     });
-  }
+  if (courseId) andConditions.push({ courseId: String(courseId) });
+  if (isDeleted !== undefined)
+    andConditions.push({ isDeleted: Boolean(isDeleted) });
 
-  // 👀 Visibility: Non-admins only see modules from visible courses
-  if (!user || (user.role !== 'ADMIN' && user.role !== 'SUPER_ADMIN')) {
+  // Non-admins see only modules from visible courses
+  if (!user || !['ADMIN', 'SUPER_ADMIN'].includes(user.userRole)) {
     andConditions.push({
       course: { visibility: true },
       isDeleted: false,
@@ -74,7 +73,7 @@ const getModules = async (
       where: whereConditions,
       skip,
       take: limit,
-      orderBy: { [sortBy]: sortOrder },
+      orderBy: sortBy ? { [sortBy]: sortOrder } : { order: 'asc' },
       select: {
         id: true,
         title: true,
@@ -99,19 +98,15 @@ const getModules = async (
     prisma.courseModule.count({ where: whereConditions }),
   ]);
 
-  return {
-    meta: { page, limit, total },
-    data: modules,
-  };
+  return { meta: { page, limit, total }, data: modules };
 };
 
 const getModuleById = async (moduleId: string) => {
   const module = await prisma.courseModule.findUnique({
     where: { id: moduleId },
   });
-  if (!module || module.isDeleted) {
+  if (!module || module.isDeleted)
     throw new ApiError(StatusCodes.NOT_FOUND, 'Module not found');
-  }
   return module;
 };
 
@@ -123,10 +118,8 @@ const updateModule = async (
     where: { id: moduleId },
     select: { id: true, title: true, isDeleted: true },
   });
-
-  if (!module || module.isDeleted) {
+  if (!module || module.isDeleted)
     throw new ApiError(StatusCodes.NOT_FOUND, 'Module not found');
-  }
 
   await prisma.courseModule.update({
     where: { id: moduleId },
@@ -149,20 +142,17 @@ const restoreModule = async (moduleId: string): Promise<{ title: string }> => {
     where: { id: moduleId },
     select: { id: true, title: true, isDeleted: true },
   });
-  if (!module || !module.isDeleted) {
+  if (!module || !module.isDeleted)
     throw new ApiError(
       StatusCodes.NOT_FOUND,
       'Module not found or already active',
     );
-  }
 
-  const restored = await prisma.courseModule.update({
+  return prisma.courseModule.update({
     where: { id: moduleId },
     data: { isDeleted: false },
     select: { title: true },
   });
-
-  return restored;
 };
 
 const deleteModule = async (moduleId: string): Promise<{ title: string }> => {
@@ -170,17 +160,14 @@ const deleteModule = async (moduleId: string): Promise<{ title: string }> => {
     where: { id: moduleId },
     select: { id: true, title: true, isDeleted: true },
   });
-  if (!module || module.isDeleted) {
+  if (!module || module.isDeleted)
     throw new ApiError(StatusCodes.NOT_FOUND, 'Module not found');
-  }
 
-  const deleted = await prisma.courseModule.update({
+  return prisma.courseModule.update({
     where: { id: moduleId },
     data: { isDeleted: true },
     select: { title: true },
   });
-
-  return deleted;
 };
 
 const hardDeleteModule = async (
@@ -188,17 +175,10 @@ const hardDeleteModule = async (
 ): Promise<{ title: string }> => {
   const module = await prisma.courseModule.findUnique({
     where: { id: moduleId },
-    select: { id: true, title: true, isDeleted: true },
   });
-  if (!module || module.isDeleted) {
-    throw new ApiError(StatusCodes.NOT_FOUND, 'Module not found');
-  }
+  if (!module) throw new ApiError(StatusCodes.NOT_FOUND, 'Module not found');
 
-  const deleted = await prisma.courseModule.delete({
-    where: { id: moduleId },
-  });
-
-  return deleted;
+  return prisma.courseModule.delete({ where: { id: moduleId } });
 };
 
 export const CourseModuleService = {

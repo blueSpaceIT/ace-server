@@ -1,5 +1,12 @@
+import { ExamType } from '@prisma/client';
 
-
-export interface ICourse {
-  // Define fields here
+export interface CreateCourseInput {
+  title: string;
+  description: string;
+  price: number;
+  examType: ExamType;
+  organizationId?: string;
+  metadata?: Record<string, unknown>;
+  visibility?: boolean;
+  featured?: boolean;
 }

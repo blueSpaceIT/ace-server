@@ -9,18 +9,36 @@ const router = Router();
 
 router.post(
   '/',
-  auth(UserRole.ADMIN, UserRole.SUPER_ADMIN),
+  auth(UserRole.ADMIN, UserRole.SUPER_ADMIN, UserRole.TEACHER),
   validateRequest(CourseModuleValidation.createModuleValidationSchema),
   CourseModuleController.createModule,
 );
 
-router.get('/', CourseModuleController.getModules);
+router.get(
+  '/',
+  auth(
+    UserRole.STUDENT,
+    UserRole.TEACHER,
+    UserRole.ADMIN,
+    UserRole.SUPER_ADMIN,
+  ),
+  CourseModuleController.getModules,
+);
 
-router.get('/:moduleId', CourseModuleController.getModuleById);
+router.get(
+  '/:moduleId',
+  auth(
+    UserRole.STUDENT,
+    UserRole.TEACHER,
+    UserRole.ADMIN,
+    UserRole.SUPER_ADMIN,
+  ),
+  CourseModuleController.getModuleById,
+);
 
 router.patch(
   '/:moduleId',
-  auth(UserRole.ADMIN, UserRole.SUPER_ADMIN),
+  auth(UserRole.ADMIN, UserRole.SUPER_ADMIN, UserRole.TEACHER),
   validateRequest(CourseModuleValidation.updateModuleValidationSchema),
   CourseModuleController.updateModule,
 );
@@ -33,13 +51,13 @@ router.patch(
 
 router.delete(
   '/:moduleId',
-  auth(UserRole.ADMIN, UserRole.SUPER_ADMIN),
+  auth(UserRole.ADMIN, UserRole.SUPER_ADMIN, UserRole.TEACHER),
   CourseModuleController.deleteModule,
 );
 
-//hard delete
+// Hard delete (admin/super admin only)
 router.delete(
-  '/:moduleId/delete',
+  '/:moduleId/hard-delete',
   auth(UserRole.ADMIN, UserRole.SUPER_ADMIN),
   CourseModuleController.hardDeleteModule,
 );

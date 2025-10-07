@@ -71,6 +71,7 @@ app.get('/', (req: Request, res: Response) => {
     developerContact: {
       email: 'mrshakilhossain@outlook.com',
       website: 'https://shakil-tawny.vercel.app',
+      developedBy: 'BlueSpaceIT',
     },
   });
 });

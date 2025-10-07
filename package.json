@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "main": "index.js",
   "repository": "",
-  "author": "Md. Shakil Hossain <mrshakilhossain@outlook.com>",
+  "author": "Md. Shakil Hossain <mrshakilhossain@outlook.com> | BlueSpaceIT",
   "license": "MIT",
   "scripts": {
     "start:prod": "node ./dist/server.js",

@@ -5,6 +5,7 @@ import { CourseModuleRoutes } from '../modules/courseModule/courseModule.routes'
 import { EnrollmentRoutes } from '../modules/enrollment/enrollment.routes';
 import { OrganizationRoutes } from '../modules/organization/organization.routes';
 import { OtpRoutes } from '../modules/otp/otp.route';
+import { PracticeRoutes } from '../modules/practice/practice.routes';
 import { UserRoutes } from '../modules/user/user.routes';
 
 const router = express.Router();
@@ -37,6 +38,10 @@ const moduleRoutes = [
   {
     path: '/enrollment',
     route: EnrollmentRoutes,
+  },
+  {
+    path: '/practice',
+    route: PracticeRoutes,
   },
 ];
 

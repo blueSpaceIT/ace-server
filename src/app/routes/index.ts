@@ -3,6 +3,7 @@ import { AuthRoutes } from '../modules/auth/auth.routes';
 import { CourseRoutes } from '../modules/course/course.routes';
 import { CourseModuleRoutes } from '../modules/courseModule/courseModule.routes';
 import { EnrollmentRoutes } from '../modules/enrollment/enrollment.routes';
+import { MockTestRoutes } from '../modules/mockTest/mockTest.routes';
 import { OrganizationRoutes } from '../modules/organization/organization.routes';
 import { OtpRoutes } from '../modules/otp/otp.route';
 import { PracticeRoutes } from '../modules/practice/practice.routes';
@@ -42,6 +43,10 @@ const moduleRoutes = [
   {
     path: '/practice',
     route: PracticeRoutes,
+  },
+  {
+    path: '/mock-test',
+    route: MockTestRoutes,
   },
 ];
 

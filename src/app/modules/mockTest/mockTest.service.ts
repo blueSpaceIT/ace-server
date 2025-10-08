@@ -103,9 +103,9 @@ const createMockTest = async (
 
   // Role restriction
   if (
-    user.userRole !== UserRole.ADMIN &&
-    user.userRole !== UserRole.SUPER_ADMIN &&
-    user.userRole !== UserRole.TEACHER
+    !(
+      [UserRole.ADMIN, UserRole.SUPER_ADMIN, UserRole.TEACHER] as UserRole[]
+    ).includes(user.userRole)
   ) {
     throw new ApiError(
       StatusCodes.FORBIDDEN,
@@ -113,72 +113,73 @@ const createMockTest = async (
     );
   }
 
-  //  Create MockTest with connected questions
+  let adminId: string | null = null;
+
+  if (
+    user.userRole === UserRole.ADMIN ||
+    user.userRole === UserRole.SUPER_ADMIN
+  ) {
+    const adminProfile = await prisma.admin.findUnique({
+      where: { userId: user.id },
+    });
+
+    if (!adminProfile) {
+      throw new ApiError(
+        StatusCodes.BAD_REQUEST,
+        'Admin profile not found. Please contact support.',
+      );
+    }
+
+    adminId = adminProfile.id;
+  }
+
+  // Validate questions exist and not deleted
+  const questionIds = questions.map((q) => q.questionId);
+  const validQuestions = await prisma.question.findMany({
+    where: { id: { in: questionIds }, isDeleted: false },
+  });
+  if (
+    validQuestions.length !== questionIds.length ||
+    validQuestions.length === 0
+  ) {
+    throw new ApiError(
+      StatusCodes.BAD_REQUEST,
+      'Some or all questions not found or deleted. Please check question IDs.',
+    );
+  }
+
+  // Create MockTest
   const mockTest = await prisma.mockTest.create({
     data: {
       title,
       examType,
       durationMin,
       instructions,
-      organizationId,
-      adminId: user.id,
-      questions: {
-        create: questions.map((q) => ({
-          question: { connect: { id: q.questionId } },
-          order: q.order,
-        })),
-      },
+      organizationId: organizationId || null,
+      adminId,
     },
     include: {
-      questions: {
-        include: { question: true },
-      },
+      organization: true,
+      admin: true,
     },
   });
 
-  return mockTest;
-};
+  // Create MockTestQuestion entries
+  await Promise.all(
+    questions.map(async (q) => {
+      return prisma.mockTestQuestion.create({
+        data: {
+          mockTestId: mockTest.id,
+          questionId: q.questionId,
+          order: q.order,
+        },
+      });
+    }),
+  );
 
-const updateMockTest = async (id: string, payload: any, user: IAuthUser) => {
-  const existing = await prisma.mockTest.findUnique({ where: { id } });
-  if (!existing)
-    throw new ApiError(StatusCodes.NOT_FOUND, 'Mock test not found');
-  if (
-    user.userRole !== UserRole.ADMIN &&
-    user.userRole !== UserRole.SUPER_ADMIN &&
-    user.userRole !== UserRole.TEACHER
-  ) {
-    throw new ApiError(
-      StatusCodes.FORBIDDEN,
-      'You are not authorized to update a mock test',
-    );
-  }
-
-  const { questionIds, ...updateData } = payload;
-
-  // Update basic info
-  await prisma.mockTest.update({
-    where: { id },
-    data: {
-      ...updateData,
-      updatedAt: new Date(),
-    },
-  });
-
-  // Update related questions (replace all)
-  if (questionIds && questionIds.length > 0) {
-    await prisma.mockTestQuestion.deleteMany({ where: { mockTestId: id } });
-    await prisma.mockTestQuestion.createMany({
-      data: questionIds.map((q: any) => ({
-        mockTestId: id,
-        questionId: q.questionId,
-        order: q.order,
-      })),
-    });
-  }
-
-  return prisma.mockTest.findUnique({
-    where: { id },
+  // Fetch updated mock with questions
+  const updatedMock = await prisma.mockTest.findUnique({
+    where: { id: mockTest.id },
     include: {
       questions: {
         include: { question: true },
@@ -186,12 +187,127 @@ const updateMockTest = async (id: string, payload: any, user: IAuthUser) => {
       },
     },
   });
+
+  return updatedMock;
+};
+
+const updateMockTest = async (
+  id: string,
+  payload: CreateMockTestInput,
+  user: IAuthUser,
+) => {
+  const existing = await prisma.mockTest.findUnique({
+    where: { id },
+    include: { questions: true },
+  });
+
+  if (!existing) {
+    throw new ApiError(StatusCodes.NOT_FOUND, 'Mock test not found');
+  }
+
+  // Role-based restriction
+  if (
+    !(
+      [UserRole.ADMIN, UserRole.SUPER_ADMIN, UserRole.TEACHER] as UserRole[]
+    ).includes(user.userRole)
+  ) {
+    throw new ApiError(
+      StatusCodes.FORBIDDEN,
+      'You are not authorized to update a mock test',
+    );
+  }
+
+  const {
+    title,
+    examType,
+    durationMin,
+    instructions,
+    organizationId,
+    questions,
+  } = payload;
+
+  let adminId: string | null = existing.adminId;
+
+  //  If admin/super_admin, ensure admin profile exists
+  if (
+    user.userRole === UserRole.ADMIN ||
+    user.userRole === UserRole.SUPER_ADMIN
+  ) {
+    const adminProfile = await prisma.admin.findUnique({
+      where: { userId: user.id },
+    });
+
+    if (!adminProfile) {
+      throw new ApiError(
+        StatusCodes.BAD_REQUEST,
+        'Admin profile not found. Please contact support.',
+      );
+    }
+
+    adminId = adminProfile.id;
+  }
+
+  //  Validate that provided question IDs exist & not deleted
+  const questionIds = questions?.map((q) => q.questionId) || [];
+  if (questionIds.length > 0) {
+    const validQuestions = await prisma.question.findMany({
+      where: { id: { in: questionIds }, isDeleted: false },
+    });
+
+    if (
+      validQuestions.length !== questionIds.length ||
+      validQuestions.length === 0
+    ) {
+      throw new ApiError(
+        StatusCodes.BAD_REQUEST,
+        'Some or all questions not found or deleted. Please check question IDs.',
+      );
+    }
+
+    //  Remove old question links & replace with new ones
+    await prisma.mockTestQuestion.deleteMany({
+      where: { mockTestId: id },
+    });
+
+    await prisma.mockTestQuestion.createMany({
+      data: questions.map((q) => ({
+        mockTestId: id,
+        questionId: q.questionId,
+        order: q.order,
+      })),
+    });
+  }
+
+  // Update mock test metadata
+  const updatedMock = await prisma.mockTest.update({
+    where: { id },
+    data: {
+      title,
+      examType,
+      durationMin,
+      instructions,
+      organizationId: organizationId || null,
+      adminId,
+      updatedAt: new Date(),
+    },
+    include: {
+      questions: {
+        include: { question: true },
+        orderBy: { order: 'asc' },
+      },
+    },
+  });
+
+  return updatedMock;
 };
 
 const deleteMockTest = async (id: string, user: IAuthUser) => {
+  // Role-based access
+
   if (
-    user.userRole !== UserRole.ADMIN &&
-    user.userRole !== UserRole.SUPER_ADMIN
+    !([UserRole.ADMIN, UserRole.SUPER_ADMIN] as UserRole[]).includes(
+      user.userRole,
+    )
   ) {
     throw new ApiError(
       StatusCodes.FORBIDDEN,
@@ -199,7 +315,24 @@ const deleteMockTest = async (id: string, user: IAuthUser) => {
     );
   }
 
-  await prisma.mockTest.delete({ where: { id } });
+  // Check if mock test exists
+  const existingMock = await prisma.mockTest.findUnique({
+    where: { id },
+  });
+
+  if (!existingMock) {
+    throw new ApiError(StatusCodes.NOT_FOUND, 'Mock test not found');
+  }
+
+  // Delete associated MockTestQuestions first
+  await prisma.mockTestQuestion.deleteMany({
+    where: { mockTestId: id },
+  });
+
+  // Delete the mock test itself
+  await prisma.mockTest.delete({
+    where: { id },
+  });
 };
 
 export const MockTestService = {

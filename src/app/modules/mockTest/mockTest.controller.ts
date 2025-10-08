@@ -67,7 +67,7 @@ const deleteMockTest = catchAsync(async (req: Request, res: Response) => {
   await MockTestService.deleteMockTest(id, user);
 
   sendResponse(res, {
-    statusCode: StatusCodes.NO_CONTENT,
+    statusCode: StatusCodes.OK,
     success: true,
     message: 'Mock test deleted successfully',
     data: null,
